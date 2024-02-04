@@ -12,7 +12,7 @@ database = SQLAlchemy()
 
 
 # roles
-# 1) buyer (customer)
+# 1) customer
 # 2) courier
 # 3) owner
 

@@ -16,7 +16,7 @@ jwt = JWTManager(application)
 
 
 @application.route("/search?name=<PRODUCT_NAME>&category=<CATEGORY_NAME>", methods=['GET'])
-@roleCheck(role="buyer")
+@roleCheck(role="customer")
 @jwt_required()
 def search(name, category):
     categoryList = []
@@ -59,7 +59,7 @@ def search(name, category):
 
 
 @application.route("/order", methods=['POST'])
-@roleCheck(role="buyer")
+@roleCheck(role="customer")
 @jwt_required()
 def order():
     # products = request.json["requests"]
@@ -129,7 +129,7 @@ def order():
 
 
 @application.route("/status", methods=['GET'])
-@roleCheck(role="buyer")
+@roleCheck(role="customer")
 @jwt_required()
 def status():
     orderList = []
@@ -167,7 +167,7 @@ def status():
 
 
 @application.route("/delivered", methods=['POST'])
-@roleCheck(role="buyer")
+@roleCheck(role="customer")
 @jwt_required()
 def delivered():
     orderId = request.get_json().get("id")

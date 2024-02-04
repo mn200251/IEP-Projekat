@@ -1,3 +1,6 @@
+import json
+import re
+
 from flask import Flask, request, Response, jsonify
 from configuration import Configuration
 from models import database, User
@@ -15,6 +18,12 @@ def index():
     return "Hello world"
 
 
+def checkEmail(email):
+    pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b'
+    if re.match(pattern, email):
+        return True
+    return False
+
 @application.route("/register_customer", methods=["POST"])
 def register_customer():
     email = request.json.get("email", "")
@@ -27,32 +36,37 @@ def register_customer():
     forenameEmpty = len(forename) == 0
     surnameEmpty = len(surname) == 0
 
-    if emailEmpty:
-        return Response("Field email is missing.", status=400)
-    if passwordEmpty:
-        return Response("Field password is missing.", status=400)
     if forenameEmpty:
-        return Response("Field forename is missing.", status=400)
+        return Response(json.dumps({"message": "Field forename is missing."}), status=400)
     if surnameEmpty:
-        return Response("Field surname is missing.", status=400)
+        return Response(json.dumps({"message": "Field surname is missing."}), status=400)
+    if emailEmpty:
+        return Response(json.dumps({"message": "Field email is missing."}), status=400)
+    if passwordEmpty:
+        return Response(json.dumps({"message": "Field password is missing."}), status=400)
 
-    result = parseaddr(email)
-    if len(result[1]) == 0:
-        return Response("“Invalid email.", status=400)
+
+    # result = parseaddr(email)
+    # if len(result[1]) == 0:
+    #     return Response(json.dumps({"message": "Invalid email."}), status=400)
+
+    result = checkEmail(email)
+    if (not result):
+        return Response(json.dumps({"message": "Invalid email."}), status=400)
 
     if len(password) < 8:
-        return Response("“Invalid password.", status=400)
+        return Response(json.dumps({"message": "Invalid password."}), status=400)
 
     # check if email already exists
     user = User.query.filter(User.email == email).first()
 
     if user:
-        return Response("Email already exists.", status=400)
-    user = User(email=email, password=password, forename=forename, surname=surname, role="buyer")
+        return Response(json.dumps({"message": "Email already exists."}), status=400)
+    user = User(email=email, password=password, forename=forename, surname=surname, role="customer")
     database.session.add(user)
     database.session.commit()
 
-    return Response("Registration successful!", status=200)
+    return Response(status=200)
 
 
 @application.route("/register_courier", methods=["POST"])
@@ -67,33 +81,39 @@ def register_courier():
     forenameEmpty = len(forename) == 0
     surnameEmpty = len(surname) == 0
 
-    if emailEmpty:
-        return Response("Field email is missing.", status=400)
-    if passwordEmpty:
-        return Response("Field password is missing.", status=400)
-    if forenameEmpty:
-        return Response("Field forename is missing.", status=400)
-    if surnameEmpty:
-        return Response("Field surname is missing.", status=400)
 
-    result = parseaddr(email)
-    if len(result[1]) == 0:
-        return Response("“Invalid email.", status=400)
+    if forenameEmpty:
+        return Response(json.dumps({"message": "Field forename is missing."}), status=400)
+    if surnameEmpty:
+        return Response(json.dumps({"message": "Field surname is missing."}), status=400)
+    if emailEmpty:
+        return Response(json.dumps({"message": "Field email is missing."}), status=400)
+    if passwordEmpty:
+        return Response(json.dumps({"message": "Field password is missing."}), status=400)
+
+
+    # result = parseaddr(email)
+    # if len(result[1]) == 0:
+    #     return Response(json.dumps({"message": "Invalid email."}), status=400)
+
+    result = checkEmail(email)
+    if (not result):
+        return Response(json.dumps({"message": "Invalid email."}), status=400)
 
     if len(password) < 8:
-        return Response("“Invalid password.", status=400)
+        return Response(json.dumps({"message": "Invalid password."}), status=400)
 
     # check if email already exists
     user = User.query.filter(User.email == email).first()
 
     if user:
-        return Response("Email already exists.", status=400)
+        return Response(json.dumps({"message": "Email already exists."}), status=400)
 
     user = User(email=email, password=password, forename=forename, surname=surname, role="courier")
     database.session.add(user)
     database.session.commit()
 
-    return Response("Registration successful!", status=200)
+    return Response(status=200)
 
 
 jwt = JWTManager(application)
@@ -107,19 +127,24 @@ def login():
     emailEmpty = len(email) == 0
     passwordEmpty = len(password) == 0
 
-    if emailEmpty:
-        return Response("Field email is missing.", status=400)
-    if passwordEmpty:
-        return Response("Field password is missing.", status=400)
 
-    result = parseaddr(email)
-    if len(result[1]) == 0:
-        return Response("“Invalid email.", status=400)
+    if emailEmpty:
+        return Response(json.dumps({"message": "Field email is missing."}), status=400)
+    if passwordEmpty:
+        return Response(json.dumps({"message": "Field password is missing."}), status=400)
+
+    # result = parseaddr(email)
+    # if len(result[1]) == 0:
+    #     return Response(json.dumps({"message": "Invalid email."}), status=400)
+
+    result = checkEmail(email)
+    if (not result):
+        return Response(json.dumps({"message": "Invalid email."}), status=400)
 
     user = User.query.filter(and_(User.email == email, User.password == password)).first()
 
     if not user:
-        return Response("Invalid credentials!", status=400)
+        return Response(json.dumps({"message": "Invalid credentials."}), status=400)
 
     additionalClaims = {
         "forename": user.forename,
@@ -144,7 +169,7 @@ def delete():
     user = User.query.filter(User.email == identity).first()
 
     if not user:
-        return Response("Unknown user.", status=400)
+        return Response(json.dumps({"message": "Unknown user."}), status=400)
 
     database.session.delete(user)
     database.session.commit()
