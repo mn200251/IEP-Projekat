@@ -1,0 +1,118 @@
+version: '3'
+
+services:
+  authenticationDB:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    ports:
+      - 3308:3306
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 10
+    volumes:
+    - authenticationdbdata:/var/lib/mysql
+    networks:
+      - authenticationnet
+
+  authenticationDBMigration:
+    image: authenticationdbmigration
+    environment:
+      - DATABASE_URL=authenticationDB
+    depends_on:
+      authenticationDB:
+        condition: service_healthy
+    networks:
+      - authenticationnet
+
+  authentication:
+    image: authentication
+    environment:
+      - DATABASE_URL=authenticationDB
+    depends_on:
+      - authenticationDBMigration
+    ports:
+      - 5000:5000
+    networks:
+      - authenticationnet
+
+  storeDB:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    ports:
+      - 3307:3306
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 10s
+      retries: 10
+    volumes:
+      - storedbdata:/var/lib/mysql
+    networks:
+      - storenet
+
+  storeDBMigration:
+    image: storedbmigration
+    environment:
+      - DATABASE_URL=storeDB
+    depends_on:
+      storeDB:
+        condition: service_healthy
+    networks:
+      - storenet
+
+  ownerDockerImage:
+    image: owner
+    environment:
+      - DATABASE_URL=storeDB
+    depends_on:
+      - storeDBMigration
+    ports:
+      - 5001:5001
+    networks:
+      - storenet
+
+  customerDockerImage:
+    image: customer
+    environment:
+      - DATABASE_URL=shopDB
+    depends_on:
+      - storeDBMigration
+    ports:
+      - 5002:5002
+    networks:
+      - storenet
+
+  courierDockerImage:
+    image: courier
+    environment:
+      - DATABASE_URL=shopDB
+    depends_on:
+      - storeDBMigration
+    ports:
+      - 5003:5003
+    networks:
+      - storenet
+
+  adminer:
+    image: adminer
+    restart: always
+    depends_on:
+      authenticationDB:
+        condition: service_healthy
+      storeDB:
+        condition: service_healthy
+    networks:
+      - authenticationnet
+      - storenet
+    ports:
+      - 8080:8080
+
+volumes:
+  authenticationdbdata:
+  storedbdata:
+
+networks:
+  authenticationnet:
+  storenet:
