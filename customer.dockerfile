@@ -4,7 +4,7 @@ RUN mkdir -p /opt/src/customer
 WORKDIR /opt/src/customer
 
 COPY store/configuration.py ./configuration.py
-COPY store/owner.py ./customer.py
+COPY store/customer.py ./customer.py
 COPY store/rolecheck.py ./rolecheck.py
 COPY store/models.py ./models.py
 

@@ -89,7 +89,7 @@ services:
   customerDockerImage:
     image: customer
     environment:
-      - DATABASE_URL=shopDB
+      - DATABASE_URL=storeDB
     depends_on:
       - storeDBMigration
     ports:
@@ -103,7 +103,7 @@ services:
   courierDockerImage:
     image: courier
     environment:
-      - DATABASE_URL=shopDB
+      - DATABASE_URL=storeDB
     depends_on:
       - storeDBMigration
     ports:

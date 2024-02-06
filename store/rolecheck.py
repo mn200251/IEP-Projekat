@@ -9,7 +9,7 @@ def roleCheck(role):
         def decorator(*arguments, **keywordArguments):
             verify_jwt_in_request()
             claims = get_jwt()
-            if role == claims["role"]:
+            if role == claims["roles"]:
                 return function(*arguments, **keywordArguments)
             else:
                 return jsonify({"msg": "Missing Authorization Header"}), 401
