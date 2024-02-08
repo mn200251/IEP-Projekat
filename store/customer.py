@@ -1,5 +1,6 @@
 import datetime
 import json
+from datetime import datetime
 
 from flask import Flask, jsonify, request, Response
 from configuration import Configuration
@@ -23,111 +24,9 @@ application.config.from_object(Configuration)
 jwt = JWTManager(application)
 
 
-@application.route("/searchFilip", methods=["GET"])
-@roleCheck(role="customer")
-def searchFilip():
-    product_name = request.args.get('name')
-    category_name = request.args.get('category')
-
-    filter_conditions = []
-
-    if product_name:
-        filter_conditions.append(Product.name.contains(product_name))
-
-    if category_name:
-
-        subquery = database.session.query(Product.id).join(ProductCategories).join(Category).filter(
-            Category.name.contains(category_name)).subquery()
-        filter_conditions.append(Product.id.in_(subquery))
-
-    final_filter = and_(*filter_conditions)
-    products = database.session.query(Product).filter(final_filter).all()
-    matching_categories = {category.name for product in products for category in product.categories}
-    response = {
-        "categories": list(matching_categories),
-        "products": [
-            {
-                "categories": [category.name for category in product.categories],
-                "id": product.id,
-                "name": product.name,
-                "price": product.price
-            }
-            for product in products
-        ]
-    }
-
-    return jsonify(response), 200
-
-@application.route("/searchAmela", methods=["GET"])
-@roleCheck("customer")
-def searchAmela():
-
-    try:
-        name = request.args.get("name", None)
-        category = request.args.get("category", None)
-
-        if category is None or len(category) == 0:
-            searchCategories = Category.query.all()
-        else:
-            searchCategories = Category.query.filter(
-                Category.name.like("%" + category + "%")
-            ).all()
-
-        category_ids = [category.id for category in searchCategories]
-
-        if name is None or len(name) == 0:
-            searchProducts = (
-                Product.query.join(ProductCategories)
-                .filter(ProductCategories.categoryId.in_(category_ids))
-                .all()
-            )
-        else:
-            searchProducts = (
-                Product.query.join(ProductCategories)
-                .filter(
-                    Product.name.like("%" + name + "%"),
-                    ProductCategories.categoryId.in_(category_ids),
-                )
-                .all()
-            )
-
-        filtered_category_ids = list(
-            set([pc.id for prod in searchProducts for pc in prod.categories])
-        )
-        filtered_categories = [
-            cat for cat in searchCategories if cat.id in filtered_category_ids
-        ]
-
-        resultObject = {
-            "categories": [cat.name for cat in filtered_categories],
-            "products": [
-                {
-                    "categories": [cat.name for cat in prod.categories],
-                    "id": prod.id,
-                    "name": prod.name,
-                    "price": prod.price,
-                }
-                for prod in searchProducts
-            ],
-        }
-
-        return Response(json.dumps(resultObject), status=200)
-
-    except Exception as e:
-        return Response(json.dumps(str(e)), status=401)
-
-
 @application.route("/search", methods=['GET'])
 @roleCheck(role="customer")
-@jwt_required()
 def search():
-    access_token = request.headers.get('Authorization')
-    if not access_token or not access_token.startswith('Bearer '):
-        return jsonify({"msg": "Missing Authorization Header"}), 401
-
-    categoryList = []
-    productList = []
-
     try:
         product_name = request.args.get('name', "")
         category_name = request.args.get('category', "")
@@ -135,15 +34,16 @@ def search():
         categories = []
         products = []
 
-        if category_name == "":
-            categories = Category.query.all()
-        else:
-            categories = Category.query.filter(Category.name.like("%" + category_name + "%")).all()
+        categories = Category.query.all() if not category_name \
+            else Category.query.filter(Category.name.like("%" + category_name + "%")).all()
 
-        if product_name == "":
-            products = Product.query.all()
-        else:
-            products = Product.query.filter(Product.name.like("%" + product_name + "%")).all()
+        categoryIds = [cat.id for cat in categories]
+
+        products = (Product.query.join(ProductCategories).filter(
+            Product.name.like("%" + product_name + "%"),
+            ProductCategories.categoryId.in_(categoryIds), ).all()
+                    ) if product_name and len(product_name) > 0 \
+            else Product.query.join(ProductCategories).filter(ProductCategories.categoryId.in_(categoryIds)).all()
 
         # threads = Thread.query.join ( ThreadTag ).join ( Tag ).filter (
         #         or_ (
@@ -157,102 +57,119 @@ def search():
         # categories = Category.query.filter(Category.name.ilike(f'%{category_name}%')).all()
         # products = Product.query.filter(Product.name.ilike(f"%{product_name}")).all()
 
-        for currCategory in categories:
-            categoryList.append(currCategory.name)
+        filtered_category_ids = list(
+            set([pc.id for prod in products for pc in prod.categories])
+        )
 
-        for currProduct in products:
-            currProductCategoriesList = []
-            for currProductCategory in currProduct.categories:
-                if currProductCategory.name in currProduct.categories:
-                    currProductCategoriesList.append(currProductCategory.name)
+        filtered_categories = [
+            cat for cat in categories if cat.id in filtered_category_ids
+        ]
 
-            productList.append({
-                "categories": currProductCategoriesList,
-                "id": currProduct.id,
-                "name": currProduct.name,
-                "price": currProduct.price
-            })
+        result_data = {
+            "categories": [cat.name for cat in filtered_categories],
+            "products": [
+                {
+                    "categories": [cat.name for cat in prod.categories],
+                    "id": prod.id,
+                    "name": prod.name,
+                    "price": prod.price,
+                }
+                for prod in products
+            ],
+        }
 
-        return jsonify({
-            "categories": categoryList,
-            "products": productList
-        })
+        return Response(json.dumps(result_data), status=200)
 
-    except:
-        return Response(status=401)
+    except Exception as error:
+        return Response(json.dumps(str(error)), status=401)
+
 
 @application.route("/order", methods=['POST'])
 @roleCheck(role="customer")
-@jwt_required()
 def order():
     access_token = request.headers.get('Authorization')
     if not access_token or not access_token.startswith('Bearer '):
         return jsonify({"msg": "Missing Authorization Header"}), 401
 
-    # products = request.json["requests"]
-    products = request.json.get("requests", "")
+    if "requests" not in request.json:
+        return {"message": "Field requests is missing."}, 400
 
-    if not products:
-        return jsonify({"message": "Field requests missing"}), 400
+    reqeusts = request.json["requests"]
 
     identity = get_jwt_identity()
     # refreshClaims = get_jwt()
     # refreshClaims["forename"]
 
-    database.session.begin()
+    for i, req in enumerate(reqeusts):
+        if "id" not in req:
+            return {"message": f"Product id is missing for request number {i}."}, 400
+        if "quantity" not in req:
+            return {"message": f"Product quantity is missing for request number {i}."}, 400
 
-    newOrder = Order(price=0, dateCreated=datetime.datetime.now(), status="cekanje", orderedBy=identity)
-    database.session.add(newOrder)
+        productId = req["id"]
+        if not isinstance(productId, int) or productId <= 0:
+            return {"message": f"Invalid product id for request number {i}."}, 400
 
-    i = 0
-    for prod in products:
-        # try:
-        #     prodId = prod["id"]
-        # except:
-        #     database.session.rollback()
-        #     return jsonify({"message": f"“Product id is missing for request number {i}."}), 400
+        quantity = req["quantity"]
+        if not isinstance(quantity, int) or quantity <= 0:
+            return {"message": f"Invalid product quantity for request number {i}."}, 400
 
-        # try:
-        #     prodQuantity = prod["quantity"]
-        # except:
-        #     database.session.rollback()
-        #     return jsonify({"message": f"Product quantity is missing for request number {i}."}), 400
+        check = Product.query.filter(Product.id == productId).first()
 
-        prodId = prod.get("id")
-        if not prodId:
-            database.session.rollback()
-            return jsonify({"message": f"Product id is missing for request number {i}."}), 400
+        if not check:
+            return {"message": f"Invalid product for request number {i}."}, 400
 
-        prodQuantity = prod.get("quantity")
-        if not prodQuantity:
-            database.session.rollback()
-            return jsonify({"message": f"Product quantity is missing for request number {i}."}), 400
-
-        if type(prodId) != int and int(prodId) <= 0:
-            database.session.rollback()
-            return jsonify({"message": f"Invalid product id for request number {i}."}), 400
-        prodId = int(prodId)
-
-        if type(prodQuantity) != int and int(prodQuantity) <= 0:
-            database.session.rollback()
-            return jsonify({"message": f"Invalid product quantity for request number {i}."}), 400
-        prodQuantity = int(prodQuantity)
-
-        currProduct = Product.query.filter(Product.id == prodId).first()
-
-        if not currProduct:
-            database.session.rollback()
-            return jsonify({"message": f"Invalid product for request number {i}."}), 400
-
-        currOrderProduct = OrderProduct(productId=currProduct.id, orderId=newOrder.id, quantity=prodQuantity)
-        database.session.add(currOrderProduct)
-
-        i += 1
-
-    newOrder.calculate_total_price()
+    newOrder = Order(price=0, dateCreated=datetime.utcnow(), status="CREATED", orderedBy=identity)
     # database.session.add(newOrder)
+    # database.session.commit()
+
+    for req in reqeusts:
+        productId = req["id"]
+        product = Product.query.get(productId)
+        newOrder.products.append(product)
+
+    database.session.add(newOrder)
     database.session.commit()
+
+    for req in reqeusts:
+        productId = req["id"]
+        quantity = req["quantity"]
+
+        product = Product.query.get(productId)
+        OrderProduct.query.filter_by(
+            productId=product.id, orderId=newOrder.id
+        ).first().quantity = quantity
+
+    database.session.commit()
+    newOrder.calculate_total_price()
+    database.session.commit()
+
     return jsonify({"id": newOrder.id}), 200
+
+
+def format_order_response(all_orders):
+    def format_product_response(product, order_id):
+        order_product = (
+            OrderProduct.query.filter_by(orderId=order_id, productId=product.id)
+            .first()
+        )
+        return {
+            "categories": [category.name for category in product.categories],
+            "name": product.name,
+            "price": float(product.price),
+            "quantity": order_product.quantity,
+        }
+
+    def format_order(order):
+        return {
+            "products": [format_product_response(product, order.id) for product in order.products],
+            "price": order.price,
+            "status": order.status,
+            "timestamp": order.dateCreated.isoformat(),
+        }
+
+    formatted_response = {"orders": [format_order(order) for order in all_orders]}
+    return formatted_response
 
 
 @application.route("/status", methods=['GET'])
@@ -268,63 +185,53 @@ def status():
 
     allOrders = Order.query.filter(Order.orderedBy == identity).all()
 
-    for currOrder in allOrders:
-        productList = []
-        categoryList = []
-        for currProduct in currOrder.products:
-            for currCategory in currProduct.categories:
-                categoryList.append(currCategory.name)
-
-            quantity = OrderProduct.query.filter(OrderProduct.productId == currProduct.id, OrderProduct.orderId == currOrder.id).first().quantity
-            productList.append(jsonify(
-                {
-                    "categories": categoryList,
-                    "name": currProduct.name,
-                    "price": currProduct.price,
-                    "quantity": quantity
-                }
-            ))
-
-        orderList.append(jsonify(
-            {
-                "products": productList,
-                "price": currOrder.price,
-                "status": currOrder.status,
-                "timestamp": currOrder.dateCreated
-            }
-        ))
-
-    return jsonify({"orders": orderList}), 200
+    response = format_order_response(allOrders)
+    return jsonify(response), 200
 
 
 @application.route("/delivered", methods=['POST'])
 @roleCheck(role="customer")
-@jwt_required()
 def delivered():
     access_token = request.headers.get('Authorization')
     if not access_token or not access_token.startswith('Bearer '):
         return jsonify({"msg": "Missing Authorization Header"}), 401
 
-    orderId = request.get_json().get("id")
-
-    if not orderId:
-        return jsonify({"message": "Missing order id."}), 400
-
     try:
-        orderId = int(orderId)
+        requestObject = request.get_json()
+        if "id" not in requestObject.keys():
+            return Response(json.dumps({'message': 'Missing order id.'}), status=400)
 
-        if orderId <= 0:
-            raise Exception
 
-        currOrder = Order.query.filter(Order.id == orderId).first()
+        data = request.get_json()
+
+        if not data or data is None:
+            return Response(json.dumps({'message': 'Missing order id.'}), status=400)
+
+
+
+        if 'id' not in data or data["id"] is None:
+            return Response(json.dumps({'message': 'Missing order id.'}), status=400)
+
+        orderId = data["id"]
+
+        if not orderId or orderId is None:
+            return Response(json.dumps({'message': 'Missing order id.'}), status=400)
+
+        if not isinstance(orderId, int) or orderId <= 0:
+            return Response(json.dumps({'message': 'Invalid order id.'}), status=400)
+
+        currOrder = Order.query.get(orderId)
 
         if not currOrder or currOrder.status != "PENDING":
-            raise Exception
+            return Response(json.dumps({'message': 'Invalid order id.'}), status=400)
+
+        currOrder.status = "PENDING"
+
+        database.session.commit()
 
     except:
-        return jsonify({"message": "Invalid order id."}), 400
+        return Response(json.dumps({'message': 'Missing order id.'}), status=400)
 
-    currOrder.status = "COMPLETE"
     return Response(status=200)
 
 

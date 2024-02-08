@@ -22,7 +22,7 @@ class OrderProduct(database.Model):
 
     orderId = database.Column(database.Integer, database.ForeignKey('order.id'), primary_key=True)
     productId = database.Column(database.Integer, database.ForeignKey('product.id'), primary_key=True)
-    quantity = database.Column(database.Integer, nullable=False)
+    quantity = database.Column(database.Integer, nullable=False, default=1)
 
 
 class Product(database.Model):
@@ -60,6 +60,7 @@ class Order(database.Model):
     orderedBy = database.Column(database.String(256), nullable=False)
 
     def calculate_total_price(self):
-        # Calculate the total price based on the products in the order
-        total_price = sum(product.price for product in self.products)
-        self.price = total_price
+        self.price = 0
+        for product in self.products:
+            orderProduct = OrderProduct.query.filter_by(orderId=self.id, productId=product.id).first()
+            self.price += orderProduct.quantity * product.price

@@ -1,4 +1,5 @@
 import datetime
+import json
 
 from flask import Flask, jsonify, request, Response
 from configuration import Configuration
@@ -20,7 +21,7 @@ jwt = JWTManager(application)
 @jwt_required()
 def orders_to_deliver():
     orderList = []
-    allOrders = Order.query.filter(Order.status == "PENDING").all()
+    allOrders = Order.query.filter(Order.status == "CREATED").all()
 
     for order in allOrders:
         orderList.append(jsonify({
@@ -28,33 +29,52 @@ def orders_to_deliver():
             "email": order.orderedBy
         }))
 
-    return jsonify({"orders": orderList}), 200
+    # return jsonify({"orders": orderList}), 200
+    return Response(json.dumps({"orders": orderList}), 200)
 
 
 @application.route("/pick_up_order", methods=['POST'])
 @roleCheck(role="courier")
-@jwt_required()
 def pick_up_order():
-    orderId = request.get_json().get("id")
-
-    if not orderId:
-        return jsonify({"message": "Missing order id."}), 400
+    access_token = request.headers.get('Authorization')
+    if not access_token or not access_token.startswith('Bearer '):
+        return jsonify({"msg": "Missing Authorization Header"}), 401
 
     try:
-        orderId = int(orderId)
+        requestObject = request.get_json()
+        if "id" not in requestObject.keys():
+            return Response(json.dumps({'message': 'Missing order id.'}), status=400)
 
-        if orderId <= 0:
-            raise Exception
+        data = request.get_json()
 
-        currOrder = Order.query.filter(Order.id == orderId).first()
+        if not data or data is None:
+            return Response(json.dumps({'message': 'Missing order id.'}), status=400)
+
+        if 'id' not in data or data["id"] is None:
+            return Response(json.dumps({'message': 'Missing order id.'}), status=400)
+
+        orderId = data["id"]
+
+        # return Response(json.dumps({'message': orderId}), status=400)
+
+        if not orderId or orderId is None or orderId == "":
+            return Response(json.dumps({'message': 'Missing order id.'}), status=400)
+
+        if not isinstance(orderId, int) or orderId <= 0:
+            return Response(json.dumps({'message': 'Invalid order id.'}), status=400)
+
+        currOrder = Order.query.get(orderId)
 
         if not currOrder or currOrder.status != "CREATED":
-            raise Exception
+            return Response(json.dumps({'message': 'Invalid order id.'}), status=400)
+
+        currOrder.status = "PENDING"
+
+        database.session.commit()
 
     except:
-        return jsonify({"message": "Invalid order id."}), 400
+        return Response(json.dumps({'message': 'Missing order id.'}), status=400)
 
-    currOrder.status = "PENDING"
     return Response(status=200)
 
 
