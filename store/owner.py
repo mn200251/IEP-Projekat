@@ -8,7 +8,7 @@ from flask_jwt_extended import JWTManager, jwt_required
 from models import *
 from rolecheck import roleCheck
 
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func, case, desc
 
 from models import database
 
@@ -201,7 +201,6 @@ def product_statistics():
 
     content = []
 
-
     products = database.session.query(
         Product.name,
         func.sum(case([(Order.status == "COMPLETE", OrderProduct.quantity)], else_=0)).label("sold"),
@@ -210,14 +209,14 @@ def product_statistics():
         .group_by(Product.name).all()
 
     for product in products:
-        currJson = jsonify({"name": product.name,
-                            "sold": int(product.sold or 0),
-                            "waiting": int(product.waiting or 0)
-                            })
+        currJson = {"name": product.name,
+                    "sold": int(product.sold or 0),
+                    "waiting": int(product.waiting or 0)
+                    }
 
         content.append(currJson)
 
-    return jsonify({"statistics": content}), 200
+    return Response(json.dumps({'statistics': content}), status=200)
 
 
 @application.route("/category_statistics", methods=['GET'])
@@ -232,16 +231,17 @@ def category_statistics():
 
     categories = database.session.query(
         Category.name, func.sum(case([(Order.status == 'COMPLETE', OrderProduct.quantity)]), else_=0).label('product_count')
-    ).join(ProductCategories, Category.id == ProductCategories.categoryId).join(Product, ProductCategories.productName == Product.name) \
-                  .group_by(Category.name) \
-                  .order_by(func.count(ProductCategories.productName).desc(), Category.name).all()
+    ).outerjoin(ProductCategories) \
+        .outerjoin(Product) \
+        .outerjoin(OrderProduct) \
+        .outerjoin(Order) \
+        .group_by(Category.name) \
+        .order_by(desc('product_count'), Category.name).all()
 
     for category in categories:
-        currJson = jsonify({"name": category.name})
+        content.append(category.name)
 
-        content.append(currJson)
-
-    return jsonify({"statistics": content}), 200
+    return Response(json.dumps({'statistics': content}), status=200)
 
 
 if __name__ == "__main__":

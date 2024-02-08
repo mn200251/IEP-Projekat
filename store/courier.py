@@ -18,19 +18,17 @@ jwt = JWTManager(application)
 
 @application.route("/orders_to_deliver", methods=['GET'])
 @roleCheck(role="courier")
-@jwt_required()
 def orders_to_deliver():
-    orderList = []
-    allOrders = Order.query.filter(Order.status == "CREATED").all()
+    access_token = request.headers.get('Authorization')
+    if not access_token or not access_token.startswith('Bearer '):
+        return jsonify({"msg": "Missing Authorization Header"}), 401
 
-    for order in allOrders:
-        orderList.append(jsonify({
-            "id": order.id,
-            "email": order.orderedBy
-        }))
+    orders = Order.query.filter_by(status='CREATED').all()
 
-    # return jsonify({"orders": orderList}), 200
-    return Response(json.dumps({"orders": orderList}), 200)
+    orders_to_deliver = [{"id": order.id, "email": order.orderedBy} for order in orders]
+    res = {}
+    res["orders"] = orders_to_deliver
+    return Response(json.dumps(res), 200)
 
 
 @application.route("/pick_up_order", methods=['POST'])
@@ -56,6 +54,8 @@ def pick_up_order():
         orderId = data["id"]
 
         # return Response(json.dumps({'message': orderId}), status=400)
+
+
 
         if not orderId or orderId is None or orderId == "":
             return Response(json.dumps({'message': 'Missing order id.'}), status=400)

@@ -207,8 +207,6 @@ def delivered():
         if not data or data is None:
             return Response(json.dumps({'message': 'Missing order id.'}), status=400)
 
-
-
         if 'id' not in data or data["id"] is None:
             return Response(json.dumps({'message': 'Missing order id.'}), status=400)
 
@@ -225,7 +223,7 @@ def delivered():
         if not currOrder or currOrder.status != "PENDING":
             return Response(json.dumps({'message': 'Invalid order id.'}), status=400)
 
-        currOrder.status = "PENDING"
+        currOrder.status = "COMPLETE"
 
         database.session.commit()
 
